@@ -38,7 +38,7 @@ DNS.1 = nodeselector-mutator
 DNS.2 = nodeselector-mutator.nodeselector-mutator
 DNS.3 = nodeselector-mutator.nodeselector-mutator.svc
 EOF
- ```
+```
 Generate RSA Private key:
 ```
 openssl genrsa -out ./server-key.pem 2048
