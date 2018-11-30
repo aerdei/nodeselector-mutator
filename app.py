@@ -11,8 +11,8 @@ app.debug = True
 
 patchJSONadd = '[{"op":"add","path":"/spec/template/spec/nodeSelector","value":{"zone":"internal"}}]'
 patchAddBase64 = base64.b64encode(patchJSONadd.encode())
-patchJSONremove = '[{"op":"add","path":"/spec/template/spec/nodeSelector","value":""}]'
-#patchJSONremove = '[{"op":"add","path":"/spec/template/spec/nodeSelector","value":{}}]'
+patchJSONremove = '[{"op":"remove","path":"/spec/template/spec/nodeSelector/zone"}]'
+patchRemoveBase64 = base64.b64encode(patchJSONremove.encode())
 
 
 @app.route('/mutator', methods=['GET', 'POST', 'PATCH'])
@@ -37,13 +37,7 @@ def index():
           "internal" == spec['nodeSelector']["zone"]):
         print (
             "DeploymentConfig does not contain emptyDir, patching to remove nodeSelector...")
-        requestNodeSelector = spec['nodeSelector']
-        del requestNodeSelector['zone']
-        patchJSONremoveLoads = json.loads(patchJSONremove)
-        patchJSONremoveLoads[0]['value'] = requestNodeSelector
-        print ("Patch: ", json.dumps(patchJSONremoveLoads))
-        responseJSON['response']['patch'] = base64.b64encode(
-            json.dumps(patchJSONremoveLoads).encode()).decode()
+        responseJSON['response']['patch'] = patchRemoveBase64.decode()
     print("\n Response: \n", json.dumps(responseJSON), "\n")
     return json.dumps(responseJSON)
 

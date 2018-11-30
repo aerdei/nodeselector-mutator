@@ -22,8 +22,8 @@ kubernetesMasterConfig:
 Restart the master(s) after modifying the configuration file(s).
 ## 2. Generating certificate and key:
  Create a certificate signing request configuration:
- ```
- cat <<EOF >> ./csr.conf
+```
+cat <<EOF >> ./csr.conf
 [req]
 req_extensions = v3_req
 distinguished_name = req_distinguished_name
@@ -45,7 +45,7 @@ openssl genrsa -out ./server-key.pem 2048
 ```
 Create the certificate signing request:
 ```
-openssl req -new -key ./server-key.pem -subj "/CN=nodeselector-mutator.nodeselector-mutator.svc" -out ${tmpdir}/server.csr -config ${tmpdir}/csr.conf
+openssl req -new -key ./server-key.pem -subj "/CN=nodeselector-mutator.nodeselector-mutator.svc" -out ./server.csr -config ./csr.conf
 ```
 Create and send a certificateSigningRequest to OpenShift:
 ```
@@ -70,14 +70,43 @@ oc get csr
 ```
 Approve the CertificateSigningRequest and verify it has been signed:
 ```
-oc certificate approve nodeselector-mutator-csr
+oc adm certificate approve nodeselector-mutator-csr
 oc get csr
 ```
 Get the certificate:
 ```
-serverCert=$(oc get csr nodeselector-mutator-csr -o jsonpath='{.status.certificate}')
+oc get csr nodeselector-mutator-csr -o jsonpath='{.status.certificate}' | openssl base64 -d -A -out ./server-cert.pem
 ```
-## 3. Set up the mutating admission controller webserver
+## 3. Set up the mutating admission controller configuration and webserver:
+Export the CA bundle so we can easily inject it in our next step:
+```
+export CA_BUNDLE=$(oc get configmap -n kube-system extension-apiserver-authentication -o=jsonpath='{.data.client-ca-file}' | base64 | tr -d '\n')
+```
+Create the MutatingWebhookConfiguration:
+
+```
+cat <<EOF | oc create -f -
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: nodeselector-mutator-mwc
+  labels:
+    app: nodeselector-mutator
+webhooks:
+  - name: nodeselector-mutator.openshift.com
+    clientConfig:
+      service:
+        name: nodeselector-mutator
+        namespace: nodeselector-mutator
+        path: "/mutator"
+      caBundle: ${CA_BUNDLE}
+    rules:
+      - operations: [ "CREATE", "UPDATE" ]
+        apiGroups: ["*"]
+        apiVersions: ["v1"]
+        resources: ["deploymentconfigs"]
+EOF
+```
 Import the Python 3.6 S2I image:
 ``` 
 oc import-image python-36-rhel7 --from=registry.access.redhat.com/rhscl/python-36-rhel7 --confirm
@@ -88,7 +117,7 @@ oc new-build --image-stream=python-36-rhel7 --to nodeselector-mutator --binary=t
 ```
 Start the S2I build with the certificate, key, app.py, and requirements.txt in the current folder:
 ``` 
-oc start-build nodeselector-mutator --from-dir=.
+oc start-build nodeselector-mutator --from-dir=. -F
 ```
 Create a new DC:
 ```
