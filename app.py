@@ -7,7 +7,7 @@ import logging
 from flask import Flask, request
 
 APP = Flask(__name__)
-APP.debug = True 
+APP.debug = True
 
 LOGGER = logging.getLogger('mutator_logger')
 LOGGER.setLevel(logging.INFO)
@@ -55,30 +55,30 @@ JSON_PATCH_REMOVE_BASE64 = base64.b64encode(JSON_PATCH_REMOVE_STRING.encode())
 def index():
     """Respond to AdmissionReviewRequests with a JSON patch
     to either remove or add zone:internal nodeSelector,
-    based on the presence of emptyDir in the deploymentConfig. """
+    based on the presence of emptyDir in the deploymentConfig."""
 
     resp_json = json.loads(ADMISSION_REVIEW_RESPONSE_STRING)
     req_json = json.loads(request.data)
     resp_json['response']['uid'] = req_json['request']['uid']
     spec = req_json['request']['object']['spec']['template']['spec']
     LOGGER.debug("\n Request:\n%s", json.dumps(req_json))
-    if (req_json['request']['kind']['kind'] == "DeploymentConfig" and
-            "volumes" in spec and
-            [item for item in spec['volumes'] if "emptyDir" in item]):
-        if not ("nodeSelector" in spec and
-                "zone" in spec['nodeSelector'] and
-                spec['nodeSelector']["zone"] == "internal"):
-            LOGGER.info("[%s] DeploymentConfig %s",req_json['request']['uid'],
-                         "contains emptyDir,"
-                         "patching to add nodeSelector...")
+    if (req_json['request']['kind']['kind'] == "DeploymentConfig"
+            and "volumes" in spec
+            and [item for item in spec['volumes'] if "emptyDir" in item]):
+        if not ("nodeSelector" in spec
+                and "zone" in spec['nodeSelector']
+                and spec['nodeSelector']["zone"] == "internal"):
+            LOGGER.info("[%s] DeploymentConfig %s", req_json['request']['uid'],
+                        "contains emptyDir,"
+                        "patching to add nodeSelector...")
             resp_json['response']['patch'] = JSON_PATCH_ADD_BASE64.decode(
             )
-    elif ("nodeSelector" in spec and
-          "zone" in spec['nodeSelector'] and
-          spec['nodeSelector']["zone"] == "internal"):
-        LOGGER.info("[%s] DeploymentConfig %s",req_json['request']['uid'],
-                     "does not contain emptyDir,"
-                     "patching to remove nodeSelector...")
+    elif ("nodeSelector" in spec
+          and "zone" in spec['nodeSelector']
+          and spec['nodeSelector']["zone"] == "internal"):
+        LOGGER.info("[%s] DeploymentConfig %s", req_json['request']['uid'],
+                    "does not contain emptyDir,"
+                    "patching to remove nodeSelector...")
         resp_json['response']['patch'] = JSON_PATCH_REMOVE_BASE64.decode(
         )
     LOGGER.debug("Response:\n%s", json.dumps(resp_json))
