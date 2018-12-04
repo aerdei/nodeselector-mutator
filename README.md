@@ -3,12 +3,12 @@
 Enable MutatingAdmissionWebhook in `/etc/origin/master/master-config.yaml`:
 ```
 admissionConfig:  
-   pluginConfig:  
-     MutatingAdmissionWebhook:  
-       configuration:  
-         apiVersion: v1  
-         disable: false  
-         kind: DefaultAdmissionConfig
+  pluginConfig:  
+    MutatingAdmissionWebhook:  
+      configuration:  
+        apiVersion: v1  
+        disable: false  
+        kind: DefaultAdmissionConfig
 ```
 Define signing certificate and key in `/etc/origin/master/master-config.yaml`:
 ```
