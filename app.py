@@ -1,47 +1,90 @@
-#!flask/bin/python
-import os
-import sys
+"""
+A Flask application to serve as a MutatingAdmissionWebhook webserver.
+"""
 import json
-import uuid
 import base64
-from flask import Flask, request, Response, g
+import logging
+from flask import Flask, request
 
-app = Flask(__name__)
-app.debug = True
+APP = Flask(__name__)
+APP.debug = True 
 
-patchJSONadd = '[{"op":"add","path":"/spec/template/spec/nodeSelector","value":{"zone":"internal"}}]'
-patchAddBase64 = base64.b64encode(patchJSONadd.encode())
-patchJSONremove = '[{"op":"remove","path":"/spec/template/spec/nodeSelector/zone"}]'
-patchRemoveBase64 = base64.b64encode(patchJSONremove.encode())
+LOGGER = logging.getLogger('mutator_logger')
+LOGGER.setLevel(logging.INFO)
+CH = logging.StreamHandler()
+CH.setLevel(logging.DEBUG)
+FORMATTER = logging.Formatter(
+    '%(asctime)s - %(name)s -'
+    ' %(levelname)s - %(message)s')
+CH.setFormatter(FORMATTER)
+LOGGER.addHandler(CH)
+
+ADMISSION_REVIEW_RESPONSE_STRING = (
+    '{'
+    ' "kind": "AdmissionReview",'
+    '  "apiVersion": "admission.k8s.io/v1beta1",'
+    '  "response": {'
+    '    "uid": "",'
+    '    "allowed": true,'
+    '    "patchType": "JSONPatch",'
+    '    "patch": ""'
+    '  }'
+    '}')
+JSON_PATCH_ADD_STRING = (
+    '['
+    '  {'
+    '    "op": "add",'
+    '    "path": "/spec/template/spec/nodeSelector",'
+    '    "value": {'
+    '      "zone": "internal"'
+    '    }'
+    '  }'
+    ']')
+JSON_PATCH_ADD_BASE64 = base64.b64encode(JSON_PATCH_ADD_STRING.encode())
+JSON_PATCH_REMOVE_STRING = (
+    '['
+    '  {'
+    '    "op": "remove",'
+    '    "path": "/spec/template/spec/nodeSelector/zone"'
+    '  }'
+    ']')
+JSON_PATCH_REMOVE_BASE64 = base64.b64encode(JSON_PATCH_REMOVE_STRING.encode())
 
 
-@app.route('/mutator', methods=['GET', 'POST', 'PATCH'])
+@APP.route('/mutator', methods=['GET', 'POST'])
 def index():
-    responseJSON = json.loads(
-        '{"kind": "AdmissionReview","apiVersion": "admission.k8s.io/v1beta1","response": {"uid": "","allowed": true,"patchType": "JSONPatch","patch":""}}')
-    requestJSON = json.loads(request.data)
-    responseJSON['response']['uid'] = requestJSON['request']['uid']
-    spec = requestJSON['request']['object']['spec']['template']['spec']
-    print("\n Request: \n", json.dumps(requestJSON), "\n")
-    if (requestJSON['request']['kind']['kind'] == "DeploymentConfig" and
-        "volumes" in spec and
+    """Respond to AdmissionReviewRequests with a JSON patch
+    to either remove or add zone:internal nodeSelector,
+    based on the presence of emptyDir in the deploymentConfig. """
+
+    resp_json = json.loads(ADMISSION_REVIEW_RESPONSE_STRING)
+    req_json = json.loads(request.data)
+    resp_json['response']['uid'] = req_json['request']['uid']
+    spec = req_json['request']['object']['spec']['template']['spec']
+    LOGGER.debug("\n Request:\n%s", json.dumps(req_json))
+    if (req_json['request']['kind']['kind'] == "DeploymentConfig" and
+            "volumes" in spec and
             [item for item in spec['volumes'] if "emptyDir" in item]):
         if not ("nodeSelector" in spec and
                 "zone" in spec['nodeSelector'] and
-                "internal" == spec['nodeSelector']["zone"]):
-            print (
-                "DeploymentConfig contains emptyDir, patching to add nodeSelector...")
-            responseJSON['response']['patch'] = patchAddBase64.decode()
+                spec['nodeSelector']["zone"] == "internal"):
+            LOGGER.info("[%s] DeploymentConfig %s",req_json['request']['uid'],
+                         "contains emptyDir,"
+                         "patching to add nodeSelector...")
+            resp_json['response']['patch'] = JSON_PATCH_ADD_BASE64.decode(
+            )
     elif ("nodeSelector" in spec and
           "zone" in spec['nodeSelector'] and
-          "internal" == spec['nodeSelector']["zone"]):
-        print (
-            "DeploymentConfig does not contain emptyDir, patching to remove nodeSelector...")
-        responseJSON['response']['patch'] = patchRemoveBase64.decode()
-    print("\n Response: \n", json.dumps(responseJSON), "\n")
-    return json.dumps(responseJSON)
+          spec['nodeSelector']["zone"] == "internal"):
+        LOGGER.info("[%s] DeploymentConfig %s",req_json['request']['uid'],
+                     "does not contain emptyDir,"
+                     "patching to remove nodeSelector...")
+        resp_json['response']['patch'] = JSON_PATCH_REMOVE_BASE64.decode(
+        )
+    LOGGER.debug("Response:\n%s", json.dumps(resp_json))
+    return json.dumps(resp_json)
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', ssl_context=(
+    APP.run(debug=True, host='0.0.0.0', ssl_context=(
         'server-cert.pem', 'server-key.pem'))
