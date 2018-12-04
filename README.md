@@ -1,7 +1,7 @@
 # Mutating Admission Controllers
 ## 1. Configuring OpenShift
 Enable MutatingAdmissionWebhook in `/etc/origin/master/master-config.yaml`:
-```
+```yaml
 admissionConfig:  
   pluginConfig:  
     MutatingAdmissionWebhook:  
@@ -11,7 +11,7 @@ admissionConfig:
         kind: DefaultAdmissionConfig
 ```
 Define signing certificate and key in `/etc/origin/master/master-config.yaml`:
-```
+```yaml
 kubernetesMasterConfig:
   controllerArguments:
     cluster-signing-cert-file:
@@ -22,7 +22,7 @@ kubernetesMasterConfig:
 Restart the master(s) after modifying the configuration file(s).
 ## 2. Generating certificate and key:
  Create a certificate signing request configuration:
-```
+```yaml
 cat <<EOF >> ./csr.conf
 [req]
 req_extensions = v3_req
@@ -40,15 +40,15 @@ DNS.3 = nodeselector-mutator.nodeselector-mutator.svc
 EOF
 ```
 Generate RSA Private key:
-```
+```bash
 openssl genrsa -out ./server-key.pem 2048
 ```
 Create the certificate signing request:
-```
+```bash
 openssl req -new -key ./server-key.pem -subj "/CN=nodeselector-mutator.nodeselector-mutator.svc" -out ./server.csr -config ./csr.conf
 ```
 Create and send a certificateSigningRequest to OpenShift:
-```
+```yaml
 cat <<EOF | oc create -f -
 apiVersion: certificates.k8s.io/v1beta1
 kind: CertificateSigningRequest
@@ -65,26 +65,26 @@ spec:
 EOF
 ```
 Verify that the CertificateSigningRequest has been successfully created:
-```
+```bash
 oc get csr
 ```
 Approve the CertificateSigningRequest and verify it has been signed:
-```
+```bash
 oc adm certificate approve nodeselector-mutator-csr
 oc get csr
 ```
 Get the certificate:
-```
+```bash
 oc get csr nodeselector-mutator-csr -o jsonpath='{.status.certificate}' | openssl base64 -d -A -out ./server-cert.pem
 ```
 ## 3. Set up the mutating admission controller configuration and webserver:
 Export the CA bundle so we can easily inject it in our next step:
-```
+```bash
 export CA_BUNDLE=$(oc get configmap -n kube-system extension-apiserver-authentication -o=jsonpath='{.data.client-ca-file}' | base64 | tr -d '\n')
 ```
 Create the MutatingWebhookConfiguration:
 
-```
+```yaml
 cat <<EOF | oc create -f -
 apiVersion: admissionregistration.k8s.io/v1beta1
 kind: MutatingWebhookConfiguration
@@ -108,27 +108,27 @@ webhooks:
 EOF
 ```
 Import the Python 3.6 S2I image:
-``` 
+``` bash
 oc import-image python-36-rhel7 --from=registry.access.redhat.com/rhscl/python-36-rhel7 --confirm
 ```
 Create a new buildConfig:
-```
+```bash
 oc new-build --image-stream=python-36-rhel7 --to nodeselector-mutator --binary=true
 ```
 Start the S2I build with the certificate, key, app.py, and requirements.txt in the current folder:
-``` 
+``` bash
 oc start-build nodeselector-mutator --from-dir=. -F
 ```
 Create a new DC:
-```
+```bash
 oc new-app nodeselector-mutator
 ```
 Change container port to 5000 in the deploymentConfig:
-```
+```bash
 oc patch dc nodeselector-mutator --type=json -p '[{"op": "replace", "path": "/spec/template/spec/containers/0/ports", "value":[{"containerPort":5000,"protocol":"TCP"}]}]'
 ```
 Change port to 443 and targetPort to 5000 on the Service:
-```
+```bash
 oc patch svc nodeselector-mutator --type=json -p '[{"op": "replace", "path": "/spec/ports", "value":[{"name":"443-5000-tcp","port":443,"targetPort":5000,"protocol":"TCP"}]}]'
 ```
 
