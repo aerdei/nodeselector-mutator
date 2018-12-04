@@ -69,18 +69,16 @@ def index():
                 and "zone" in spec['nodeSelector']
                 and spec['nodeSelector']["zone"] == "internal"):
             LOGGER.info("[%s] DeploymentConfig %s", req_json['request']['uid'],
-                        "contains emptyDir,"
+                        "contains emptyDir, "
                         "patching to add nodeSelector...")
-            resp_json['response']['patch'] = JSON_PATCH_ADD_BASE64.decode(
-            )
+            resp_json['response']['patch'] = JSON_PATCH_ADD_BASE64.decode()
     elif ("nodeSelector" in spec
           and "zone" in spec['nodeSelector']
           and spec['nodeSelector']["zone"] == "internal"):
         LOGGER.info("[%s] DeploymentConfig %s", req_json['request']['uid'],
-                    "does not contain emptyDir,"
+                    "does not contain emptyDir, "
                     "patching to remove nodeSelector...")
-        resp_json['response']['patch'] = JSON_PATCH_REMOVE_BASE64.decode(
-        )
+        resp_json['response']['patch'] = JSON_PATCH_REMOVE_BASE64.decode()
     LOGGER.debug("Response:\n%s", json.dumps(resp_json))
     return json.dumps(resp_json)
 

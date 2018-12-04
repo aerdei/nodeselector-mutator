@@ -140,5 +140,4 @@ oc patch svc nodeselector-mutator --type=json -p '[{"op": "replace", "path": "/s
 
 [https://docs.okd.io/latest/rest_api/apis-admissionregistration.k8s.io/v1beta1.MutatingWebhookConfiguration.html](https://docs.okd.io/latest/rest_api/apis-admissionregistration.k8s.io/v1beta1.MutatingWebhookConfiguration.html)
 
-https://tools.ietf.org/html/rfc6902#section-4.3
-
+[https://tools.ietf.org/html/rfc6902](https://tools.ietf.org/html/rfc6902)
