@@ -141,3 +141,7 @@ oc patch svc nodeselector-mutator --type=json -p '[{"op": "replace", "path": "/s
 [https://docs.okd.io/latest/rest_api/apis-admissionregistration.k8s.io/v1beta1.MutatingWebhookConfiguration.html](https://docs.okd.io/latest/rest_api/apis-admissionregistration.k8s.io/v1beta1.MutatingWebhookConfiguration.html)
 
 [https://tools.ietf.org/html/rfc6902](https://tools.ietf.org/html/rfc6902)
+
+[https://github.com/kubernetes/kubernetes/blob/master/CHANGELOG-1.10.md#other-notable-changes-6](https://github.com/kubernetes/kubernetes/blob/master/CHANGELOG-1.10.md#other-notable-changes-6)
+
+[https://github.com/kubernetes/kubernetes/pull/64971](https://github.com/kubernetes/kubernetes/pull/64971)
