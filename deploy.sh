@@ -58,13 +58,13 @@ EOF
 }
 EOF
     # Check if csr has been created
-    [[ ! "$(oc get csr "$app_name" 2>&1 | grep -q 'Error')" ]] || { echo "Failed to create csr"; return 1; }
+    ! oc get csr "$app_name" 2>&1 | grep -q 'Error' || { echo "Failed to create csr"; return 1; }
     # Approve csr
-    [[ "$(oc adm certificate approve "$app_name" 2>&1 | grep -q 'approved')" ]] || { echo "Failed to approve certificate signing request"; return 1; }
+    oc adm certificate approve "$app_name" 2>&1 | grep -q 'approved' || { echo "Failed to approve certificate signing request"; return 1; }
     # Sleep a couple of seconds so that the csr can be issued
     sleep 3
     # Check if csr has been issued
-    [[ "$(oc get csr | grep "$app_name" | grep -q 'Issued')" ]] || { echo "Csr was never issued."; return 1; }
+    oc get csr | grep "$app_name" | grep -q 'Issued' || { echo "Csr was never issued."; return 1; }
     # Get the server certificate
     oc get csr "$app_name" -o jsonpath='{.status.certificate}' | openssl base64 -d -A -out ./server-cert.pem
     # Get the CA bundle
@@ -114,10 +114,10 @@ EOF
 }
 EOF
     # Import the Python 3.6 S2I image
-    [[ "$(oc import-image python-36-rhel7 --from=registry.access.redhat.com/rhscl/python-36-rhel7 --confirm | grep -q 'The import completed successfully.')" ]] ||
+    oc import-image python-36-rhel7 --from=registry.access.redhat.com/rhscl/python-36-rhel7 --confirm | grep -q 'The import completed successfully.' ||
             { echo "Could not import image"; return 1; }
     # Create a new buildConfig for building the mutating webhook
-    [[ "$(oc new-build --image-stream=python-36-rhel7 --to "$app_name" --binary=true | grep -q 'Success')" ]] ||
+    oc new-build --image-stream=python-36-rhel7 --to "$app_name" --binary=true | grep -q 'Success' ||
             { echo "Could not create imagestream or buildconfig"; return 1; }
     # Start the build and follow it
     oc start-build "$app_name" --from-dir=. -F
