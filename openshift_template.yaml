@@ -59,7 +59,7 @@ objects:
         - "${APP_NAME}"
         from:
           kind: ImageStreamTag
-          name: "${APP_NAME}":latest
+          name: "${APP_NAME}:latest"
           namespace: "${PROJECT_NAME}"
       type: ImageChange
   status:
@@ -74,7 +74,7 @@ objects:
   metadata:
     labels:
       app: "${APP_NAME}"
-    name: "${SVC_NAME}"
+    name: "${APP_NAME}"
   spec:
     ports:
     - name: 443-5000-tcp
@@ -87,3 +87,12 @@ objects:
     type: ClusterIP
   status:
     loadBalancer: {}
+parameters:
+  - name: APP_NAME
+    displayName: Application name 
+    value: "nodeselector-mutator"
+    required: true
+  - name: PROJECT_NAME
+    description: Project name
+    value: "nodeselector-mutator"
+    required: true

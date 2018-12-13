@@ -1,5 +1,6 @@
 # Mutating Admission Controllers
-## 1. Configuring OpenShift
+## Prerequisites
+### Configuring OpenShift
 Enable MutatingAdmissionWebhook in `/etc/origin/master/master-config.yaml`:
 ```yaml
 admissionConfig:  
@@ -20,7 +21,10 @@ kubernetesMasterConfig:
     - /etc/origin/master/ca.key
 ```
 Restart the master(s) after modifying the configuration file(s).
-## 2. Generating certificate and key:
+## Automated deployment
+For automated deployment, use "deploy.sh".
+## Manual deployment
+### 1. Generating certificate and key:
  Create a certificate signing request configuration:
 ```yaml
 cat <<EOF >> ./csr.conf
@@ -77,7 +81,7 @@ Get the certificate:
 ```bash
 oc get csr nodeselector-mutator-csr -o jsonpath='{.status.certificate}' | openssl base64 -d -A -out ./server-cert.pem
 ```
-## 3. Set up the mutating admission controller configuration and webserver:
+### 2. Set up the mutating admission controller configuration and webserver:
 Export the CA bundle so we can easily inject it in our next step:
 ```bash
 export CA_BUNDLE=$(oc get configmap -n kube-system extension-apiserver-authentication -o=jsonpath='{.data.client-ca-file}' | base64 | tr -d '\n')
