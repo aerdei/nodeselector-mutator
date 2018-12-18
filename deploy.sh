@@ -7,24 +7,26 @@ auto_yes=false
 
 # Function for deploying a mutating admission controller
 ocp_deploy() {
+    echo "This will deploy the mutator with the name $app_name into the project $project_name"
+    handle_confirm || exit 1
     # Check your privileges
     for resource in "bc" "dc" "csr"; do 
-        [[ "$(oc auth can-i create $resource 2>&1 | head -n1 | awk '{print $1;}')" = "yes" ]] ||
+        oc auth can-i -q create "$resource" ||
                 { echo "Logged in user has no privilege to create $resource-s."; return 1; }
     done
-    [[ "$(oc auth can-i approve csr 2>&1 | head -n1 | awk '{print $1;}')" = "yes" ]] ||
+        oc auth can-i -q approve csr ||
             { echo "Logged in user has no privilege to approve csr-s."; return 1; }
     # Create OpenShift project
     oc new-project "$project_name"
     # Generate private key
     openssl genrsa -out ./server-key.pem 2048
     # Create certificate signing request config template
-    cat <<-EOF > ./csr.conf
+    cat <<EOF > ./csr.conf
 [req]
 req_extensions = v3_req
 distinguished_name = req_distinguished_name
 [req_distinguished_name]
-[ v3_req ]
+[v3_req]
 basicConstraints = CA:FALSE
 keyUsage = nonRepudiation, digitalSignature, keyEncipherment
 extendedKeyUsage = serverAuth
@@ -37,7 +39,7 @@ EOF
     # Create certificate signing request
     openssl req -new -key ./server-key.pem -subj "/CN=$app_name.$project_name.svc" -out ./server.csr -config ./csr.conf
     # Create csr in OpenShift
-    cat <<-EOF | oc create -f -
+    oc create -f - <<EOF
 {
   "apiVersion": "certificates.k8s.io/v1beta1",
   "kind": "CertificateSigningRequest",
@@ -48,7 +50,7 @@ EOF
     "groups": [
       "system:authenticated"
     ],
-    "request": "$(base64 ./server.csr | tr -d '\n')",
+    "request": "$(base64 -w0 ./server.csr)",
     "usages": [
       "digital signature",
       "key encipherment",
@@ -58,20 +60,19 @@ EOF
 }
 EOF
     # Check if csr has been created
-    ! oc get csr "$app_name" 2>&1 | grep -q 'Error' || { echo "Failed to create csr"; return 1; }
+    oc get csr "$app_name" || { echo "Failed to create csr"; return 1; }
     # Approve csr
-    oc adm certificate approve "$app_name" 2>&1 | grep -q 'approved' || { echo "Failed to approve certificate signing request"; return 1; }
-    # Sleep a couple of seconds so that the csr can be issued
-    sleep 3
-    # Check if csr has been issued
-    oc get csr | grep "$app_name" | grep -q 'Issued' || { echo "Csr was never issued."; return 1; }
-    # Get the server certificate
-    oc get csr "$app_name" -o jsonpath='{.status.certificate}' | openssl base64 -d -A -out ./server-cert.pem
+    oc adm certificate approve "$app_name" || { echo "Failed to approve certificate signing request"; return 1; }
+    # Get certificate
+    local try=1
+    while [[ "$try" -le 3 ]]; do
+        csrcert="$(base64 -d <<<$(oc get csr $app_name -o jsonpath='{.status.certificate}'))"
+        openssl x509 <<<"$csrcert" -noout && { echo "$csrcert">./server-cert.pem; break; } || { sleep 1; let try++; }
+    done
     # Get the CA bundle
-    ca_bundle=""
-    ca_bundle=$(oc get configmap -n kube-system extension-apiserver-authentication -o=jsonpath='{.data.client-ca-file}' | base64 | tr -d '\n')
+    ca_bundle=$(oc get configmap -n kube-system extension-apiserver-authentication -o=jsonpath='{.data.client-ca-file}' | base64 -w0)
     # Create MutatingWebhookConfiguration in OpenShift
-    cat <<EOF | oc create -f -
+    oc create -f - <<EOF
 {
   "apiVersion": "admissionregistration.k8s.io/v1beta1",
   "kind": "MutatingWebhookConfiguration",
@@ -113,20 +114,27 @@ EOF
   ]
 }
 EOF
+    # Create imagestream
+    oc create imagestream python-36-rhel7 ||
+        { echo "Could not create imagestream"; return 1; }
     # Import the Python 3.6 S2I image
-    oc import-image python-36-rhel7 --from=registry.access.redhat.com/rhscl/python-36-rhel7 --confirm | grep -q 'The import completed successfully.' ||
-            { echo "Could not import image"; return 1; }
+    oc import-image python-36-rhel7 --from=registry.access.redhat.com/rhscl/python-36-rhel7 ||
+        { echo "Could not import image"; return 1; }
     # Create a new buildConfig for building the mutating webhook
-    oc new-build --image-stream=python-36-rhel7 --to "$app_name" --binary=true | grep -q 'Success' ||
-            { echo "Could not create imagestream or buildconfig"; return 1; }
+    oc new-build --image-stream=python-36-rhel7 --to "$app_name" --binary=true ||
+        { echo "Could not create imagestream or buildconfig"; return 1; }
     # Start the build and follow it
-    oc start-build "$app_name" --from-dir=. -F
+    oc start-build "$app_name" --from-dir=. -F ||
+        { echo "Could not start build"; return 1; }
     # Process the template for creating deploymentConfig and service
-    oc process -f ./openshift_template.yaml -p APP_NAME="$app_name" -p PROJECT_NAME="$project_name" | oc create -f -
+    oc process -f ./openshift_template.yaml -p APP_NAME="$app_name" -p PROJECT_NAME="$project_name" | oc create -f - ||
+        { echo "Could not process templates"; return 1; }
 }
 
 # Function for deleting files and OpenShift resources created by the script
 ocp_purge() {
+    print_delete
+    handle_confirm || exit 1
     oc delete mutatingwebhookconfiguration "$app_name"-mwc || true
     oc delete project "$project_name" || true
     oc delete csr "$app_name" || true
@@ -137,8 +145,8 @@ ocp_purge() {
 
 # Print the usage message
 print_usage() {
-    cat <<-EOF
-Usage: deploy.sh COMMAND
+    cat <<EOF
+Usage: $0 COMMAND
 
 Deploy a mutating admission controller on OpenShift
 
@@ -147,36 +155,44 @@ Commands:
   purge               Delete the files and OpenShift resources
 
 Options:
-  --project-name      OpenShift project where the resources should be deployed
-                      Default: nodeselector-mutator
-  --app-name          Application name. Will apply to buildconfig, deploymentconfig, and service
-                      Default: nodeselector-mutator
-  --confirm           Do not prompt for confirmation
-  --help              Print usage
+  --project-name=nodeselector-mutator       OpenShift project where the resources should be deployed
+  --app-name=nodeselector-mutator           Application name. Will apply to buildconfig, deploymentconfig, and service
+  --confirm                                 Do not prompt for confirmation
+  --help                                    Print usage
 EOF
 }
 
 # Digest options
 set_opts() {
+    local deploy=false
+    local purge=false
+
+    [[ "$#" -gt 0 ]] || { print_usage; exit 1; }
+    if [[ "$1" = "deploy" ]]; then
+        deploy=true
+    elif [[ "$1" = "purge" ]]; then
+        purge=true
+    else
+        echo "Unknown command \"$1\""
+    fi
     shift
-    while [[ "$#" -gt 0 ]]
-        do
+    while [[ "$#" -gt 0 ]]; do
         case "$1" in
-            --app-name)
-                app_name="$2"
-                shift 2
+            --app-name=*)
+                app_name="${1#*=}"
+                shift 1
                 ;;
-            --project-name)
-                project_name="$2"
-                shift 2
+            --project-name=*)
+                project_name="${1#*=}"
+                shift 1
                 ;;
             --confirm)
                 auto_yes=true
-                shift
+                shift 1
                 ;;
             --help)
                 print_usage
-                shift
+                exit 0
                 ;;
             *)
                 echo "Wrong option \"$1\""
@@ -184,26 +200,24 @@ set_opts() {
                 exit 1
         esac
     done
+    "$deploy" && ocp_deploy
+    "$purge" && ocp_purge
 }
 
-# Set dir to script's
-cd "$(dirname "$0")" || exit
-# Handle script commands and options
-[[ "$#" -gt 0 ]] || { print_usage; exit 1; }
-if [[ "$1" = "deploy" ]]; then
-    set_opts "$@"
-    echo "This will deploy the mutator with the name $app_name into the project $project_name"
+handle_confirm() {
     if [[ "$auto_yes" != true ]]; then
         read -rp "Type \"y\" to continue... " answer
-        if [[ "${answer,,}" = "y" ]]; then
-            ocp_deploy
+        if [[ "${answer,}" != "y" ]]; then
+            echo "Cancelling deployment"
+            return 1
+        else
+            return 0
         fi
-    else
-        ocp_deploy
     fi
-elif [[ "$1" = "purge" ]]; then
-    set_opts "$@"
-    cat <<-EOF
+}
+
+print_delete() {
+    cat <<EOF
 This will delete the following resources:
     csr.conf
     server-key.pem
@@ -212,16 +226,9 @@ This will delete the following resources:
     OpenShift mutatingwebhookconfiguration "${app_name}-mwc"
     OpenShift csr "$app_name"
 EOF
-    if [[ "$auto_yes" != true ]]; then
-        read -rp "Type \"y\" to continue... " answer
-        if [[ "${answer,,}" = "y" ]]; then
-            ocp_purge
-        fi
-    else
-        ocp_purge
-    fi
-else
-    echo "Unknown command \"$1\""
-    print_usage
-    exit 1
-fi
+}
+
+# Set dir to script's
+cd "$(dirname $0)" || exit
+# Handle script commands and options
+set_opts "$@"

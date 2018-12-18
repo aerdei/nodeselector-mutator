@@ -1,1 +1,5 @@
 .vscode/
+server-cert.pem
+csr.conf
+server-key.pem
+server.csr

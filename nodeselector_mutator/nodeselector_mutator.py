@@ -41,7 +41,7 @@ def _mutate(app, req: Request) -> Response:
             "%s", "Received an invalid request. "
             "It is either not AdmissionReviewRequest, or it is invalid.")
         return BAD_REQUEST_RESPONSE
-    app.logger.debug("Request:%s", json.dumps(req))
+    app.logger.debug("Request: %s", json.dumps(req))
     if (req.get('request', {}).get('kind', {}).get('kind',
                                                    {}) == "DeploymentConfig"
             and 'uid' in req.get('request', {})
@@ -60,26 +60,24 @@ def _mutate(app, req: Request) -> Response:
         if (any('emptyDir' in item for item in spec.get('volumes', {})) and
                 spec.get('nodeSelector', {}).get('zone', "") != "internal"):
             app.logger.info(
-                "%s", "[" + req['request']['uid'] + "] " +
-                "DeploymentConfig contains emptyDir, "
-                "patching to add nodeSelector...")
+                "[%s] DeploymentConfig contains emptyDir, "
+                "patching to add nodeSelector...", req['request']['uid'])
             resp['response']['patchType'] = "JSONPatch"
             resp['response']['patch'] = JSON_PATCH_ADD_BASE64
-        elif (not any('emptyDir' in item for item in spec.get('volumes', {}))
+        elif (all('emptyDir' not in item for item in spec.get('volumes', {}))
               and spec.get('nodeSelector', {}).get('zone', "") == "internal"):
             app.logger.info(
-                "%s", "[" + req['request']['uid'] + "] " +
-                "DeploymentConfig does not contain emptyDir, "
-                "patching to remove nodeSelector...")
+                "[%s] DeploymentConfig does not contain emptyDir, "
+                "patching to remove nodeSelector...", req['request']['uid'])
             resp['response']['patchType'] = "JSONPatch"
             resp['response']['patch'] = JSON_PATCH_REMOVE_BASE64
     else:
         app.logger.error(
-            "%s", "Received an invalid request. "
+            "Received an invalid request. "
             "It is either not AdmissionReviewRequest, or it is invalid.")
         return BAD_REQUEST_RESPONSE
 
-    app.logger.debug("Response:%s", json.dumps(resp))
+    app.logger.debug("Response: %s", json.dumps(resp))
     return json.dumps(resp)
 
 
