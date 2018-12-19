@@ -66,8 +66,14 @@ EOF
     # Get certificate
     local try=1
     while [[ "$try" -le 3 ]]; do
-        csrcert="$(base64 -d <<<$(oc get csr $app_name -o jsonpath='{.status.certificate}'))"
-        openssl x509 <<<"$csrcert" -noout && { echo "$csrcert">./server-cert.pem; break; } || { sleep 1; let try++; }
+        csrcert="$(base64 -d <<< "$(oc get csr $app_name -o jsonpath='{.status.certificate}')")"
+        if [[ "$(openssl x509 <<< "$csrcert" -noout)" ]]; then
+            echo "$csrcert" > ./server-cert.pem
+            break
+        else
+            sleep 1
+            (( try++ ))
+        fi
     done
     [[ "$try" -le 3 ]] || { echo "Certificate is incorrect or was never issued."; return 1; }
     # Get the CA bundle
@@ -231,6 +237,6 @@ EOF
 }
 
 # Set dir to script's
-cd "$(dirname $0)" || exit
+cd "$(dirname "$0")" || exit
 # Handle script commands and options
 set_opts "$@"
