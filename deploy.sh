@@ -14,8 +14,8 @@ ocp_deploy() {
         oc auth can-i -q create "$resource" ||
                 { echo "Logged in user has no privilege to create $resource-s."; return 1; }
     done
-        oc auth can-i -q approve csr ||
-            { echo "Logged in user has no privilege to approve csr-s."; return 1; }
+    oc auth can-i -q approve csr ||
+        { echo "Logged in user has no privilege to approve csr-s."; return 1; }
     # Create OpenShift project
     oc new-project "$project_name"
     # Generate private key
@@ -69,6 +69,7 @@ EOF
         csrcert="$(base64 -d <<<$(oc get csr $app_name -o jsonpath='{.status.certificate}'))"
         openssl x509 <<<"$csrcert" -noout && { echo "$csrcert">./server-cert.pem; break; } || { sleep 1; let try++; }
     done
+    [[ "$try" -le 3 ]] || { echo "Certificate is incorrect or was never issued."; return 1; }
     # Get the CA bundle
     ca_bundle=$(oc get configmap -n kube-system extension-apiserver-authentication -o=jsonpath='{.data.client-ca-file}' | base64 -w0)
     # Create MutatingWebhookConfiguration in OpenShift
@@ -174,6 +175,7 @@ set_opts() {
         purge=true
     else
         echo "Unknown command \"$1\""
+        exit 1
     fi
     shift
     while [[ "$#" -gt 0 ]]; do
