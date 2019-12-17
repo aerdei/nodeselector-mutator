@@ -5,7 +5,7 @@
 ### Configuring OpenShift
 
 Enable MutatingAdmissionWebhook in `/etc/origin/master/master-config.yaml`:
-
+* For OCP 3.10 and earlier versions:  
 ```yaml
 admissionConfig:  
   pluginConfig:  
@@ -14,6 +14,16 @@ admissionConfig:
         apiVersion: v1  
         disable: false  
         kind: DefaultAdmissionConfig
+```
+* For OCP 3.11:  
+```yaml
+admissionConfig:
+  pluginConfig:
+    ValidatingAdmissionWebhook:
+      configuration:
+        apiVersion: apiserver.config.k8s.io/v1alpha
+        kubeConfigFile: /dev/null
+        kind: WebhookAdmission
 ```
 
 Define signing certificate and key in `/etc/origin/master/master-config.yaml`:
@@ -191,3 +201,5 @@ oc patch svc nodeselector-mutator --type=json -p '[{"op": "replace", "path": "/s
 [https://github.com/kubernetes/kubernetes/blob/master/CHANGELOG-1.10.md#other-notable-changes-6](https://github.com/kubernetes/kubernetes/blob/master/CHANGELOG-1.10.md#other-notable-changes-6)
 
 [https://github.com/kubernetes/kubernetes/pull/64971](https://github.com/kubernetes/kubernetes/pull/64971)
+
+[https://bugzilla.redhat.com/show_bug.cgi?id=1635918](https://bugzilla.redhat.com/show_bug.cgi?id=1635918)
